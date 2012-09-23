@@ -1,0 +1,11 @@
+Changes
+Makefile.PL
+MANIFEST
+README
+t/BGPmon-Analytics-db.t
+bin/database_import.pl
+bin/reset.pl
+etc/database_import.conf
+src/0_table_reset
+src/1_import_functions
+src/2_stat_queries

@@ -1,0 +1,84 @@
+BGPmon-Analytics-db version 0.01
+================================
+
+The BGPmon Analytics Database module includes the source and scripts
+necessary to set up a BGP-tracking database in Postgres and to populate it
+from BGPmon output.  It is a set of scripts, not a module to be imported 
+into other packages.
+
+INSTALLATION
+
+Install and configure Postgres according to its documentation and your
+own organization's policy.  This will require at least an empty database
+to install the data into, the PL/pg SQL language to be installed into
+the database cluster, and at least one user with superuser access on the
+database.
+
+Once Postgres is installed and configured, have the database superuser
+run bin/reset.pl, which will create the tables and data-ingestion
+functions within the database.
+
+It is recommended to initialize the database with a RIB snapshot.
+This can be accomplished by either downloading an archived RIB snapshot
+from an archive and running bin/database_import.pl with options to load
+from a local file, or by running bin/database_import.pl with options
+to use a live RIB stream from an active BGPmon.  Note that if the live
+stream option is used, the user will need to keep an eye on the import
+process to make sure only one RIB per peer is imported.  For this
+reason, it is recommended to use the local file options.
+
+Finally, the user can run bin/database_import.pl with options to
+either connect to a live BGPmon update stream or an archive of XFB
+update files.  When connecting to a live stream, the import process
+will simply run as long as the BGPmon is running.  When using an
+archive, only updates from the desired timerange are imported.
+
+If the database needs to be cleared or reset, the user can run 
+bin/reset.pl at any time to return the database to its original
+empty configuration.  For archiving purposes, use the pgdump
+utility in the Postgres distribution to dump the database to a file
+before calling bin/reset.pl.
+
+Please consult the perldoc for bin/database_import.pl or bin/reset.pl
+for usage questions regarding these scripts.
+
+DEPENDENCIES
+
+This module requires these other modules and libraries:
+
+  PostgreSQL 8.4 or higher, with PL/pg SQL installed
+  BGPmon::Fetch
+  BGPmon::Configure
+  BGPmon::Translator::XFB2PerlHash::Simple
+  BGPmon::Log
+  Data::Dumper
+  POSIX
+
+COPYRIGHT AND LICENCE
+Copyright (c) 2012 Colorado State University
+
+    Permission is hereby granted, free of charge, to any person
+    obtaining a copy of this software and associated documentation
+    files (the "Software"), to deal in the Software without
+    restriction, including without limitation the rights to use,
+    copy, modify, merge, publish, distribute, sublicense, and/or
+    sell copies of the Software, and to permit persons to whom
+    the Software is furnished to do so, subject to the following
+    conditions:
+
+    The above copyright notice and this permission notice shall be
+    included in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+    OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+    NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+    HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+    WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+    OTHER DEALINGS IN THE SOFTWARE.
+
+
+  Authors: Jason Bartlett
+  Date: 15 August 2012
+
