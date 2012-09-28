@@ -1,5 +1,5 @@
 /*Script to redefine the functions used for the 6watch database
-run like so: " > psql -f 1_6watch_functions_reset 6watch jason"*/
+run like so: " > psql -f 1_import_functions dbname dbuser"*/
 
 /*Helper function to dynamically generate a peer's table name*/
 DROP FUNCTION IF EXISTS generate_peer_table_name(INET,VARCHAR);
@@ -127,7 +127,8 @@ is a duplicate.*/
 
 /* check for time travelers*/
   IF $5 < current_end_time OR (current_end_time IS NULL AND $5 < current_start_time) THEN
-    RAISE EXCEPTION 'Time traveler has been detected: collector:% peer:% time:%', $2, $1, $5;
+    RAISE WARNING 'Time traveler has been detected: collector:% peer:% prefix:% old_time:% new_time:%', $2, $1, $3, current_end_time, $5;
+    RETURN;
   END IF;
 		IF current_end_time IS NULL THEN
 			IF $4 = 'FALSE' THEN

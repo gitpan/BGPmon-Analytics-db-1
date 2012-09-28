@@ -1,4 +1,4 @@
-BGPmon-Analytics-db version 0.01
+BGPmon-Analytics-db version 1.01
 ================================
 
 The BGPmon Analytics Database module includes the source and scripts
@@ -8,39 +8,19 @@ into other packages.
 
 INSTALLATION
 
-Install and configure Postgres according to its documentation and your
-own organization's policy.  This will require at least an empty database
-to install the data into, the PL/pg SQL language to be installed into
-the database cluster, and at least one user with superuser access on the
-database.
-
-Once Postgres is installed and configured, have the database superuser
-run bin/reset.pl, which will create the tables and data-ingestion
-functions within the database.
-
-It is recommended to initialize the database with a RIB snapshot.
-This can be accomplished by either downloading an archived RIB snapshot
-from an archive and running bin/database_import.pl with options to load
-from a local file, or by running bin/database_import.pl with options
-to use a live RIB stream from an active BGPmon.  Note that if the live
-stream option is used, the user will need to keep an eye on the import
-process to make sure only one RIB per peer is imported.  For this
-reason, it is recommended to use the local file options.
-
-Finally, the user can run bin/database_import.pl with options to
-either connect to a live BGPmon update stream or an archive of XFB
-update files.  When connecting to a live stream, the import process
-will simply run as long as the BGPmon is running.  When using an
-archive, only updates from the desired timerange are imported.
-
-If the database needs to be cleared or reset, the user can run 
-bin/reset.pl at any time to return the database to its original
-empty configuration.  For archiving purposes, use the pgdump
-utility in the Postgres distribution to dump the database to a file
-before calling bin/reset.pl.
-
-Please consult the perldoc for bin/database_import.pl or bin/reset.pl
-for usage questions regarding these scripts.
+This package depends on being able to connect to a postgres installation.
+The following instructions will help prepare that installation, installation
+procedures may vary across platforms.
+1. Install Postgresql 
+2. Create the database user bgpuser (sudo -u postgres createuser bgpuser)
+3. Create the database bgpdata (sudo -u postgres createdb bgpdata)
+4. Give a user other than root or postgres access to the database 
+     (should include web user): 
+   Edit /etc/postgresql/8.1/main/pg_hba.conf to give specific users access
+   Refer to postres documentation for assitance editing the pg_hba.conf file
+5. Restart postgres
+6. Initialize the bgpdata database 
+    (bin/reset.pl --dbname=bgpdata --dblogin=bgpuser)
 
 DEPENDENCIES
 

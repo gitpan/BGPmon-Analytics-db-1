@@ -84,6 +84,10 @@ use BGPmon::Configure qw/configure parameter_value/;
 use POSIX qw/strftime/;
 use Data::Dumper;
 
+BEGIN{
+	our $VERSION = '1.02';
+};
+
 #step 1: set up script args (DB name/credentials, data source, log file name,
 #config file name)
 #step 2: fetch data from the specified data source
@@ -98,7 +102,8 @@ my $db_name = 'bgpdata';
 #disambiguation when importing updates
 my %aliases = (
                 '128.223.51.15' => 'route-views4',
-                '2001:468:d01:33::80df:330f' => 'route-views4'
+                '2001:468:d01:33::80df:330f' => 'route-views4',
+		'129.82.138.6' => 'colostate-bgpmon'
               );
 
 use constant MAX_UPDATES_PER_INJECT => 3000;
@@ -259,7 +264,7 @@ if( parameter_value('source') eq 'archive' ){
     else{
         $ret = start(parameter_value('URL'),parameter_value('start-time'),
 parameter_value('end-time') );
-        process_data() if !$ret;
+        $ret = process_data() if !$ret;
         $ret = inject_updates() if !$ret;
     }
 }
@@ -270,7 +275,7 @@ elsif( BGPmon::Configure::parameter_value('source') eq 'bgpmon' ){
     }
     else{
         $ret = start(parameter_value('server'),parameter_value('port') );
-        process_data() if !$ret;
+        $ret = process_data() if !$ret;
         $ret = inject_updates() if !$ret;
     }
 }
@@ -449,17 +454,19 @@ sub inject_updates(){
     my $db_login = parameter_value('database-username');
     my $log = parameter_value('log_file');
 
-    `psql -c "TRUNCATE update_import" $db_name $db_login`;
+    `psql -c "TRUNCATE update_import" -d $db_name -U $db_login`;
     #This command loads the saved updates into a 'loading table'
     log_info('COPYing updates into database!');
-    if( `psql -c "COPY update_import FROM \'$pwd/up.sql\' USING DELIMITERS \'|\' WITH NULL AS \'\';" -L $log $db_name $db_login` ){
+    `psql -c "COPY update_import FROM \'$pwd/up.sql\' USING DELIMITERS \'|\' WITH NULL AS \'\';" -d $db_name -U $db_login 2>>$log`;
+    if($?){
         log_err("COPY failed $?!");
         return -1;
     }
     log_info('COPY complete! Beginning data injection');
 
     #This command injects the updates into the main DB structure
-    if( `psql -c "SELECT inject_updates();" -L $log $db_name $db_login` ){
+    `psql -c "SELECT inject_updates();" -d $db_name -U $db_login 2>>$log`;
+    if($?){
         log_err("INJECT failed $?!");
         return -1;
     }
@@ -467,7 +474,7 @@ sub inject_updates(){
 
     #Now we can remove the current SQL file and start a new one
     #next time through the loop
-    `rm -f up.sql`;
+    `rm -f $pwd/up.sql`;
     log_info('Reset SQL batch file!');
 
     return 0;

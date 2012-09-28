@@ -52,6 +52,10 @@ Copyright (c) 2012 Colorado State University
 
 =cut
 
+BEGIN{
+        our $VERSION = '1.02';
+};
+
 use strict;
 use warnings;
 use Getopt::Long;
@@ -62,7 +66,6 @@ my $dbname = getlogin || getpwuid($<);
 my $dblogin = getlogin || getpwuid($<);
 my $ret = GetOptions(	"dbname=s" => \$dbname,
 			"dblogin=s" => \$dblogin);
-print STDERR "Failed to process command-line arguments!  Using defaults!\n" if $ret;
 
 #Run command to clear the tables
 `psql -c "DROP TABLE timeranges,peers,prefixes,ppms,update_import CASCADE;" $dbname $dblogin`;
