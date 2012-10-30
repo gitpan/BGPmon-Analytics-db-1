@@ -1,8 +1,12 @@
 #!/usr/bin/perl
 
+#This is a small script to display the total number of prefixes, total number
+#of peering sessions, and prefix with the most updates associated with it
+#from a BGPmon database.
+
 =head1 NAME
 
-reset.pl - A script to reset a BGP database to an empty state
+report.pl - A script to print and display some statistics about the database
 
 =cut
 
@@ -16,7 +20,7 @@ Getopt::Long
 
 =head1 USAGE
 
-> ./reset.pl --dbname=database --dblogin=username
+> ./report.pl --dbname=database --dblogin=username
 
 =cut
 
@@ -52,13 +56,12 @@ Copyright (c) 2012 Colorado State University
 
 =cut
 
-BEGIN{
-        our $VERSION = '1.03';
-};
-
 use strict;
 use warnings;
 use Getopt::Long;
+
+
+our $VERSION = 1.03;
 
 #Variables to hold the database name and login name
 #The default value for both values is just the user's name
@@ -67,12 +70,6 @@ my $dblogin = getlogin || getpwuid($<);
 my $ret = GetOptions(	"dbname=s" => \$dbname,
 			"dblogin=s" => \$dblogin);
 
-#Run command to clear the tables
-`psql -c "DROP TABLE timeranges,peers,prefixes,ppms,update_import CASCADE;" $dbname $dblogin`;
-
-#Restore the table structure and function definitions
-`psql -f ../src/0_table_reset $dbname $dblogin`;
-`psql -f ../src/1_import_functions $dbname $dblogin`;
-`psql -f ../src/2_stat_queries $dbname $dblogin`;
+`psql -c "SELECT PREFIXES,VANTAGES,MOST_ACTIVE FROM (SELECT COUNT(pref) FROM prefixes) AS PREFIXES, (SELECT COUNT(DISTINCT(addr,collector)) FROM peers) AS VANTAGES, (SELECT find_most_active_prefix()) AS MOST_ACTIVE;" -d $dbname -U $dblogin`;
 
 1;

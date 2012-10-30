@@ -112,7 +112,7 @@ information depending on whether the message is an annoucement or withdrawl*/
 			UPDATE ppms SET last_timerange_dbid = current_timerange WHERE dbid = ppm_id;
 			RETURN;
 		ELSE
-                        RAISE WARNING 'Adding in a null start time';
+                        RAISE WARNING 'Prefix withdrawn without prior announcement: collector:% peer:% prefix:%', $2,$1,$3;
 			EXECUTE 'INSERT INTO '||quote_ident(peer_table)||' (ppm_dbid,end_time) VALUES ('||ppm_id||','''||$5||''') RETURNING dbid' INTO current_timerange;
 			UPDATE ppms SET last_timerange_dbid = current_timerange WHERE dbid = ppm_id;
 			RETURN;
@@ -126,10 +126,14 @@ either the prefix is being withdrawn, the origin AS is changing, or the announce
 is a duplicate.*/
 
 /* check for time travelers*/
-  IF $5 < current_end_time OR (current_end_time IS NULL AND $5 < current_start_time) THEN
-    RAISE WARNING 'Time traveler has been detected: collector:% peer:% prefix:% old_time:% new_time:%', $2, $1, $3, current_end_time, $5;
-    RETURN;
-  END IF;
+	IF $5 < current_end_time OR (current_end_time IS NULL AND $5 < current_start_time) THEN
+		IF current_end_time IS NULL THEN
+			RAISE WARNING 'Update received out of order: collector:% peer:% prefix:% old_time:% new_time:%', $2, $1, $3, current_start_time, $5;
+		ELSE
+			RAISE WARNING 'Update received out of order: collector:% peer:% prefix:% old_time:% new_time:%', $2, $1, $3, current_end_time, $5;
+		END IF;
+		RETURN;
+	END IF;
 		IF current_end_time IS NULL THEN
 			IF $4 = 'FALSE' THEN
 /*If the prefix is being withdrawn, then just set the end_time and return.*/

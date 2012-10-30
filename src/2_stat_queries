@@ -1,3 +1,5 @@
+/*This first function finds the most active prefix in the table*/
+DROP FUNCTION IF EXISTS find_most_active_prefix();
 /*These functions show how prefixes and ASes are related.*/
 DROP FUNCTION IF EXISTS get_prefixes_per_as(INTEGER);
 DROP FUNCTION IF EXISTS get_as_per_prefix(CIDR);
@@ -7,15 +9,30 @@ DROP FUNCTION IF EXISTS get_table_growth(INET,VARCHAR,TIMESTAMP,TIMESTAMP,INTERV
 DROP FUNCTION IF EXISTS get_table_at_time(INET,VARCHAR,TIMESTAMP);
 DROP FUNCTION IF EXISTS get_unique_prefix_growth(INET,VARCHAR,TIMESTAMP,TIMESTAMP,INTERVAL);
 DROP FUNCTION IF EXISTS get_unique_prefixes_at_time(INET,VARCHAR,TIMESTAMP);
-/*These functions take more advanced statistics over specific prefix dynamics
-in a peer's table over one or more timeranges.*/
-DROP FUNCTION IF EXISTS get_additions_in_range(INET,VARCHAR,TIMESTAMP,TIMESTAMP);
-DROP FUNCTION IF EXISTS get_path_changes_in_range(INET,VARCHAR,TIMESTAMP,TIMESTAMP);
-DROP FUNCTION IF EXISTS get_withdrawals_in_range(INET,VARCHAR,TIMESTAMP,TIMESTAMP);
-DROP FUNCTION IF EXISTS get_additions_per_interval(INET,VARCHAR,TIMESTAMP,TIMESTAMP,INTERVAL);
-DROP FUNCTION IF EXISTS get_path_changes_per_interval(INET,VARCHAR,TIMESTAMP,TIMESTAMP,INTERVAL);
-DROP FUNCTION IF EXISTS get_withdrawals_per_interval(INET,VARCHAR,TIMESTAMP,TIMESTAMP,INTERVAL);
 
+/*Function that finds the prefix with the most timerange entries associated
+with it.  It counts across all peers.*/
+CREATE OR REPLACE FUNCTION find_most_active_prefix() RETURNS CIDR AS $$
+DECLARE
+  p CURSOR FOR SELECT * FROM prefixes;
+  top_pref CIDR;
+  top_count INTEGER = 0;
+  curr_count INTEGER = 0;
+BEGIN
+  FOR prefix IN p LOOP
+    EXECUTE 'SELECT COUNT(1) 
+    FROM timeranges AS t, ppms AS p1, prefixes AS p2
+    WHERE p2.pref = '''||prefix.pref||''' AND
+        p2.dbid = p1.prefix_dbid AND
+        t.ppm_dbid = p1.dbid' INTO curr_count;
+    IF curr_count > top_count THEN
+        top_count = curr_count;
+        top_pref = prefix.pref;
+    END IF;
+  END LOOP;
+  RETURN top_pref;
+END;
+$$ LANGUAGE plpgsql;
 
 /*Function that returns all the prefixes announced by a given ASN.*/
 CREATE OR REPLACE FUNCTION get_prefixes_per_as(INTEGER) RETURNS SETOF CIDR AS $$
@@ -111,119 +128,4 @@ BEGIN
 END;
 $$	LANGUAGE plpgsql;
 
-/*Function to get the prefixes added to a peer's table during a given interval.
-The function takes a peer's address and collector and starting and ending timestamps
-and returns all prefixes that are added to the peer's table during that timerange.
-This function EXCLUDES path changes, but INCLUDES any reannouncement of a previously
-withdrawn prefix.*/
-CREATE OR REPLACE FUNCTION get_additions_in_range(INET,VARCHAR,TIMESTAMP,TIMESTAMP) RETURNS SETOF CIDR AS $$
-DECLARE
-	peer_table VARCHAR;
-BEGIN
-	peer_table := generate_peer_table_name($1,$2);
-	RETURN QUERY EXECUTE
-	'WITH events AS (
-		SELECT *
-		FROM '||quote_ident(peer_table)||'
-		WHERE t.start_time >= '''|| $3 ||''' AND
-			t.start_time < '''|| $4 ||'''
-		)
-	SELECT p2.pref,e1.*
-	FROM events AS e1,events AS e2,ppms AS p1,prefixes AS p2
-	WHERE
-		e1.ppm_dbid = p1.dbid AND
-		p1.prefix_dbid = p2.dbid AND
-		e2.ppm_dbid = e1.ppm_dbid AND
-		e1.ppm_dbid = e2.ppm_dbid OR
-		e2.start_time != e1.end_time';
-END;
-$$	LANGUAGE plpgsql;
-
-/*Function to get the prefixes whose path changes in a peer's table during a given interval.
-The function takes a peer's address and collector and starting and ending timestamps
-and returns all prefixes that experience a path change during that timerange.
-This function EXCLUDES route flaps, new additions, and withdrawals.*/
-CREATE OR REPLACE FUNCTION get_path_changes_in_range(INET,VARCHAR,TIMESTAMP,TIMESTAMP) RETURNS SETOF CIDR AS $$
-BEGIN
-	RETURN QUERY
-	SELECT pref
-	FROM prefixes AS p1,ppms AS p2,peers AS p3,timeranges AS t1,timeranges AS t2
-	WHERE p3.addr = $1 AND
-		p3.collector = $2 AND
-		p2.peer_dbid = p3.dbid AND
-		p2.prefix_dbid = p1.dbid AND
-		t1.ppm_dbid = p2.dbid AND
-		t1.end_time >= $3 AND
-		t1.end_time < $4 AND
-		t2.ppm_dbid = p2.dbid AND
-		t1.end_time = t2.start_time AND
-		t1.as_path != t2.as_path;
-END;
-$$	LANGUAGE plpgsql;
-
-/*Function to get the prefixes withdrawn from a peer's table during a given interval.
-The function takes a peer's address and collector and starting and ending timestamps
-and returns all prefixes that are withdrawn from the peer's table during that timerange.
-This function EXCLUDES path changes.*/
-CREATE OR REPLACE FUNCTION get_withdrawals_in_range(INET,VARCHAR,TIMESTAMP,TIMESTAMP) RETURNS SETOF CIDR AS $$
-BEGIN
-	RETURN QUERY
-	SELECT pref
-	FROM prefixes AS p1,ppms AS p2,peers AS p3,timeranges AS t1,timeranges AS t2
-	WHERE p3.addr = $1 AND
-		p3.collector = $2 AND
-		p2.peer_dbid = p3.dbid AND
-		p2.prefix_dbid = p1.dbid AND
-		t1.ppm_dbid = p2.dbid AND
-		t1.end_time >= $3 AND
-		t1.end_time < $4 AND
-		t2.ppm_dbid = p2.dbid AND
-		(t2.start_time > t1.end_time OR
-		t2.start_time IS NULL);
-END;
-$$	LANGUAGE plpgsql;
-
-/*Function to count all unique prefixes added over some intervals for a given peer.
-Function takes a start and end timestamp and a step size (i.e. '1 hour','1 week','12 days', etc.) and counts all of the unique prefixes that were
-announced during each subinterval*/
-CREATE OR REPLACE FUNCTION get_additions_per_interval(INET,VARCHAR,TIMESTAMP,TIMESTAMP,INTERVAL) RETURNS SETOF INTEGER AS $$
-DECLARE
-	i TIMESTAMP;
-BEGIN
-	i := $3;
-	WHILE i <= $4 LOOP
-		RETURN NEXT COUNT(*) FROM get_additions_in_range($1,$2,i,i+$5);
-		i := i + $5;
-	END LOOP;
-END;
-$$	LANGUAGE plpgsql;
-
-/*Function to count all path changes over some intervals for a given peer.
-Function takes a start and end timestamp and a step size (i.e. '1 hour','1 week','12 days', etc.) and gets all of the unique prefixes that changed paths during each subinterval*/
-CREATE OR REPLACE FUNCTION get_path_changes_per_interval(INET,VARCHAR,TIMESTAMP,TIMESTAMP,INTERVAL) RETURNS SETOF INTEGER AS $$
-DECLARE
-	i TIMESTAMP;
-BEGIN
-	i := $3;
-	WHILE i <= $4 LOOP
-		RETURN NEXT COUNT(*) FROM get_path_changes_in_range($1,$2,i,i+$5);
-		i := i + $5;
-	END LOOP;
-END;
-$$	LANGUAGE plpgsql;
-
-/*Function to count all unique prefixes withdrawn over some intervals for a given peer.
-Function takes a start and end timestamp and a step size (i.e. '1 hour','1 week','12 days', etc.) and counts all of the unique prefixes that were
-withdrawn during each subinterval*/
-CREATE OR REPLACE FUNCTION get_withdrawals_per_interval(INET,VARCHAR,TIMESTAMP,TIMESTAMP,INTERVAL) RETURNS SETOF INTEGER AS $$
-DECLARE
-	i TIMESTAMP;
-BEGIN
-	i := $3;
-	WHILE i <= $4 LOOP
-		RETURN NEXT COUNT(*) FROM get_withdrawals_in_range($1,$2,i,i+$5);
-		i := i + $5;
-	END LOOP;
-END;
-$$	LANGUAGE plpgsql;
 

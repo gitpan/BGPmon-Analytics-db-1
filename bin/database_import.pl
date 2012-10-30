@@ -85,7 +85,7 @@ use POSIX qw/strftime/;
 use Data::Dumper;
 
 BEGIN{
-	our $VERSION = '1.02';
+	our $VERSION = '1.03';
 };
 
 #step 1: set up script args (DB name/credentials, data source, log file name,
@@ -321,6 +321,20 @@ sub process_data{
     my $total_msgs = 0;
 
     while (1){
+	my $peering = {};
+	my $peer = '';
+	my $collector = '';
+	my @timestamp = ();
+	my $new_timestamp = '';
+	my @withdrawn = ();
+	my @nlri = ();
+	my $mp_nlri = {};
+	my $mp_with = {};
+	my @as_path = ();
+	my @asn = ();
+	my $origin = '';
+	my $lasthop = '';
+	my $canonical_collector = '';
 
         #First, get the next message in the stream and quit if there are no
         #more messages or if there was an error
@@ -340,31 +354,31 @@ sub process_data{
         }
 
         #Need peer, collector, prefix, W/A, timestamp, origin, lasthop, AS path
-        my $peering = get_peering();
+        $peering = get_peering();
         next if !keys %$peering;    #Go to next message if no peering info
 
         #Peering information is returned in a hashref
-        my $peer = $peering->{'SRC_ADDR'}->{'ADDRESS'}->{'content'};
-        my $collector = $peering->{'DST_ADDR'}->{'ADDRESS'}->{'content'};
+        $peer = $peering->{'SRC_ADDR'}->{'ADDRESS'}->{'content'};
+        $collector = $peering->{'DST_ADDR'}->{'ADDRESS'}->{'content'};
 
         #Timestamp is returned in a UNIX timestamp, but we need to convert
         #it to a human-readable version to import into Postgres
-        my @timestamp = gmtime( get_timestamp() );
-        my $new_timestamp = scalar strftime("%Y-%m-%d %H:%M:%S",@timestamp[0],@timestamp[1],@timestamp[2],@timestamp[3],@timestamp[4],@timestamp[5]);
+        @timestamp = gmtime( get_timestamp() );
+        $new_timestamp = scalar strftime("%Y-%m-%d %H:%M:%S",@timestamp[0],@timestamp[1],@timestamp[2],@timestamp[3],@timestamp[4],@timestamp[5]);
 
         #Get arrays for any v4 Announce/Withdraw elements
-        my @withdrawn = get_withdrawn();
-        my @nlri = get_nlri();
+        @withdrawn = get_withdrawn();
+        @nlri = get_nlri();
         #Get hashrefs for any MP announce/withdraw attributes
-        my $mp_nlri = get_mp_nlri();
-        my $mp_with = get_mp_withdrawn();
+        $mp_nlri = get_mp_nlri();
+        $mp_with = get_mp_withdrawn();
 
         #Get the AS Path
         #Default is to use the AS4 path if present; otherwise use 2-byte AS
-        my @as_path = get_as4_path();
+        @as_path = get_as4_path();
         @as_path = get_as_path() if !scalar(@as_path);
         #Extract all of the AS numbers from all AS Segments
-        my @asn = ();
+        @asn = ();
 
         foreach $seg (@as_path){
             my $as_list = $seg->{'AS'};
@@ -390,18 +404,20 @@ sub process_data{
         #The database expects to have fields for origin and last-hop ASNs.
         #If the AS path is only one AS long, then lasthop will be null, which
         #will make the SQL injection fail
-        my $origin = $asn[-1];
-        my $lasthop = $asn[-2] || "\'\'";
+        $origin = $asn[0];
+        $lasthop = $asn[1] || "\'\'";
 
         #Now we need to construct each individual bgpdump-esque entry 
         #to write to the import file
         #Open the SQL file if it isn't already
         log_info('Opening SQL file to write updates') if !defined fileno SQL;
         open(SQL,">",'up.sql') or die 'Unable to open file to save DB updates' if !defined fileno SQL;
+	#Make the filehandle hot so it writes in order
+	select((select(LOG), $|=1)[0]);
 
         #Collectors typically have many addresses, so we should look up
         #their canonical names for import
-        if( defined $aliases{$collector} ){ my $canonical_collector = $aliases{"$collector"}; }
+        if( defined $aliases{$collector} ){ $canonical_collector = $aliases{"$collector"}; }
         else{ $canonical_collector = $collector; }
 
         #First, we write out any MP_UNREACH entries, followed by any normal
