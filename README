@@ -7,7 +7,7 @@ from BGPmon output.  It is a set of scripts, not a module to be imported
 into other packages.
 
 INSTALLATION
-
+ 
 This package depends on being able to connect to a postgres installation.
 The following instructions will help prepare that installation, installation
 procedures may vary across platforms.

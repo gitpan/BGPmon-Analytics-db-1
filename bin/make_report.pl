@@ -61,7 +61,7 @@ use warnings;
 use Getopt::Long;
 
 
-our $VERSION = 1.03;
+our $VERSION = '1.04';
 
 #Variables to hold the database name and login name
 #The default value for both values is just the user's name

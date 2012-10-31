@@ -85,7 +85,7 @@ use POSIX qw/strftime/;
 use Data::Dumper;
 
 BEGIN{
-	our $VERSION = '1.03';
+	our $VERSION = '1.04';
 };
 
 #step 1: set up script args (DB name/credentials, data source, log file name,
