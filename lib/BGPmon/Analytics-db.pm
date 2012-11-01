@@ -1,6 +1,6 @@
 package BGPmon::Analytics::db
 
-our $VERSION = '1.04';
+our $VERSION = '1.05';
 
 
 1;

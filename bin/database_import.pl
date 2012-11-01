@@ -85,7 +85,7 @@ use POSIX qw/strftime/;
 use Data::Dumper;
 
 BEGIN{
-	our $VERSION = '1.04';
+	our $VERSION = '1.05';
 };
 
 #step 1: set up script args (DB name/credentials, data source, log file name,
@@ -404,8 +404,8 @@ sub process_data{
         #The database expects to have fields for origin and last-hop ASNs.
         #If the AS path is only one AS long, then lasthop will be null, which
         #will make the SQL injection fail
-        $origin = $asn[0];
-        $lasthop = $asn[1] || "\'\'";
+        $origin = $asn[-1];
+        $lasthop = $asn[-2] || "\'\'";
 
         #Now we need to construct each individual bgpdump-esque entry 
         #to write to the import file
