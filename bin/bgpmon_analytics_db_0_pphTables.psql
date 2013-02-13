@@ -1,19 +1,14 @@
 /* 
 To create the database, run this file through psql like so:
-prompt> psql -f 0_6watch_tables_reset 6watch [username]
+prompt> psql -f 0_pph_createTables.postgresql bgpmon_db bgpmon_db_user
 */
 
-DROP INDEX peers_n1;
-DROP INDEX prefix_index;
-DROP INDEX ppm_index;
-DROP TABLE timeranges;
-DROP TABLE ppms;
-DROP TABLE peers;
-DROP TABLE prefixes;
-DROP TABLE rib_import;
-DROP TABLE update_import;
+/* pph = peer, prefix history */
+drop schema if exists pph cascade;
+create schema pph;
 
-CREATE TABLE rib_import(
+
+CREATE TABLE pph.rib_import(
 	peer INET,
 	collector VARCHAR(30),
 	prefix CIDR,
@@ -22,7 +17,7 @@ CREATE TABLE rib_import(
 	lasthop INTEGER,
 	aspath INTEGER ARRAY
 );
-CREATE TABLE update_import(
+CREATE TABLE pph.update_import(
 	peer INET,
 	collector VARCHAR(30),
 	prefix CIDR,
@@ -34,14 +29,13 @@ CREATE TABLE update_import(
 );
 	
 
-CREATE TABLE prefixes (
+CREATE TABLE pph.prefixes (
 	pref CIDR UNIQUE NOT NULL, 
 	dbid SERIAL NOT NULL, 
 	PRIMARY KEY (dbid)
 );
-comment on table prefixes is 'Holds prefixes and associated db_ids with them.';
 
-CREATE TABLE peers (
+CREATE TABLE pph.peers (
 	dbid SERIAL NOT NULL, 
 	name VARCHAR(30), 
 	addr INET NOT NULL, 
@@ -49,10 +43,9 @@ CREATE TABLE peers (
         UNIQUE(addr,collector),
 	PRIMARY KEY (dbid)
 );
-comment on table peers is 'Holds addresses of BGP peer routers.';
-create index peers_n1 on peers (addr,collector);
+create index peers_n1 on pph.peers (addr,collector);
 
-CREATE TABLE ppms (
+CREATE TABLE pph.ppms (
 	dbid SERIAL NOT NULL,
 	peer_dbid INTEGER NOT NULL, 
 	prefix_dbid INTEGER NOT NULL, 
@@ -60,13 +53,11 @@ CREATE TABLE ppms (
 	prefix_safi INTEGER, 
 	PRIMARY KEY (dbid), 
         UNIQUE(prefix_dbid,peer_dbid),
-	FOREIGN KEY(peer_dbid) REFERENCES peers (dbid), 
-	FOREIGN KEY(prefix_dbid) REFERENCES prefixes (dbid)
+	FOREIGN KEY(peer_dbid) REFERENCES pph.peers (dbid), 
+	FOREIGN KEY(prefix_dbid) REFERENCES pph.prefixes (dbid)
 );
-comment on table ppms is 'Associative class between peers and prefixes.';
-/*create index ppm_index on ppms (prefix_dbid,peer_dbid);*/
 
-CREATE TABLE timeranges (
+CREATE TABLE pph.timeranges (
 	dbid SERIAL NOT NULL, 
 	ppm_dbid INTEGER NOT NULL,
 	start_time TIMESTAMP WITHOUT TIME ZONE, 
@@ -75,8 +66,5 @@ CREATE TABLE timeranges (
 	origin_as VARCHAR, 
 	as_path VARCHAR ARRAY,
 	PRIMARY KEY (dbid), 
-	FOREIGN KEY (ppm_dbid) REFERENCES ppms (dbid)
+	FOREIGN KEY (ppm_dbid) REFERENCES pph.ppms (dbid)
 );
-comment on table timeranges is 'Tracks active timeranges in a given ppm mapping';
-
-

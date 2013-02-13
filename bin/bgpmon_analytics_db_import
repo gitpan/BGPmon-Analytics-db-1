@@ -1,7 +1,7 @@
-#!/usr/bin/perl
+#!/usr/bin/perl 
 =head1 NAME
 
-database_import.pl - a script to import XFB-formatted BGP data into
+bgpmon_analytics_db_import - a script to import XFB-formatted BGP data into
 a postgres database. Data can be imported from a live BGPmon stream,
 an online archive of files, or from a local file.
 
@@ -9,16 +9,16 @@ an online archive of files, or from a local file.
 
 =head1 USAGE
 
-> ./database_import.pl --source archive --URL archive.domain.com 
+> ./bgpmon_analytics_db_import --source archive --URL archive.domain.com 
 --start-time 1234567890 --end-time 2345678901 [--log-level [0-7]]
 [--use_syslog|--log-file logfilename] [--database-name dbname]
 [--database-username dblogin] [--ignore_incomplete_data] [--ignore_data_errors]
 
-> ./database_import.pl --source bgpmon --server 1.2.3.4 --port 50001
+> ./bgpmon_analytics_db_import --source bgpmon --server 1.2.3.4 --port 50001
 [--log-level [0-7]] [--use_syslog|--log-file logfilename] [--database-name dbname]
 [--database-username dblogin]
 
-> ./database_import.pl --source file --xfb-file filename.xml [--log-level [0-7]]
+> ./bgpmon_analytics_db_import --source file --xfb-file filename.xml [--log-level [0-7]]
 [--use_syslog|--log-file logfilename] [--database-name dbname]
 [--database-username dblogin] [--ignore_incomplete_data] [--ignore_data_errors]
 
@@ -85,7 +85,7 @@ use POSIX qw/strftime/;
 use Data::Dumper;
 
 BEGIN{
-	our $VERSION = '1.06';
+	our $VERSION = '1.07';
 };
 
 #step 1: set up script args (DB name/credentials, data source, log file name,
@@ -96,7 +96,7 @@ BEGIN{
 #step 5: insert fields into DB staging table
 #step 6: inject updates into main DB tables
 
-my $db_name = 'bgpdata';
+my $db_name = 'bgpmon_db';
 
 #This hash is for IP addresses to be mapped to collector names for
 #disambiguation when importing updates
@@ -106,7 +106,7 @@ my %aliases = (
 		'129.82.138.6' => 'colostate-bgpmon'
               );
 
-use constant MAX_UPDATES_PER_INJECT => 3000;
+use constant MAX_UPDATES_PER_INJECT => 1000;
 
 #Define parameters for logging (filename, level, use syslog)
 #Define parameters for system state (DB name,DB credentials, config filename)
@@ -127,7 +127,7 @@ my @params = (
     {
         'Name' => 'database-username',
         'Type' => BGPmon::Configure::STRING,
-        'Default' => getlogin || getpwuid($<) || "$db_name",
+        'Default' => "bgpmon_db_user", 
         'Description' => 'The username to provide to the database server'
     },
     {
@@ -454,7 +454,7 @@ sub process_data{
         $" = ' ';
 
         #Check that we've seen X number of messages so far (set above)
-        if($total_msgs % MAX_UPDATES_PER_INJECT == 0){
+        if($total_msgs > MAX_UPDATES_PER_INJECT ){
             close(SQL);
             return -4 if inject_updates();
             log_info("Total updates processed: $total_msgs");
@@ -470,10 +470,10 @@ sub inject_updates(){
     my $db_login = parameter_value('database-username');
     my $log = parameter_value('log_file');
 
-    `psql -c "TRUNCATE update_import" -d $db_name -U $db_login`;
+    `psql -c "TRUNCATE pph.update_import" -d $db_name -U $db_login`;
     #This command loads the saved updates into a 'loading table'
     log_info('COPYing updates into database!');
-    `psql -c "COPY update_import FROM \'$pwd/up.sql\' USING DELIMITERS \'|\' WITH NULL AS \'\';" -d $db_name -U $db_login 2>>$log`;
+    `psql -c "COPY pph.update_import FROM \'$pwd/up.sql\' USING DELIMITERS \'|\' WITH NULL AS \'\';" -d $db_name -U $db_login 2>>$log`;
     if($?){
         log_err("COPY failed $?!");
         return -1;
@@ -481,7 +481,7 @@ sub inject_updates(){
     log_info('COPY complete! Beginning data injection');
 
     #This command injects the updates into the main DB structure
-    `psql -c "SELECT inject_updates();" -d $db_name -U $db_login 2>>$log`;
+    `psql -c "SELECT pph.inject_updates();" -d $db_name -U $db_login 2>>$log`;
     if($?){
         log_err("INJECT failed $?!");
         return -1;

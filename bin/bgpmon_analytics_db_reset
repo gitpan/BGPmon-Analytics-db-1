@@ -2,7 +2,8 @@
 
 =head1 NAME
 
-reset.pl - A script to reset a BGP database to an empty state
+bgpmon_analytics_db_reset
+A script to reset a BGP database to an empty state
 
 =cut
 
@@ -11,12 +12,13 @@ reset.pl - A script to reset a BGP database to an empty state
 The following Perl modules must be installed to use this script:
 
 Getopt::Long
+Cwd
 
 =cut
 
 =head1 USAGE
 
-> ./reset.pl --dbname=database --dblogin=username
+> ./bgpmon_analytics_db_reset --dbname=database --dblogin=username
 
 =cut
 
@@ -45,34 +47,61 @@ Copyright (c) 2012 Colorado State University
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
     OTHER DEALINGS IN THE SOFTWARE.\
 
-    File: reset.pl
-
     Authors: Jason Bartlett
+             Cathie Olschanowsky
     Date: 17 August 2012
+          9 January 2013
 
 =cut
 
 BEGIN{
-        our $VERSION = '1.06';
+        our $VERSION = '1.07';
 };
 
 use strict;
 use warnings;
 use Getopt::Long;
+use Cwd 'abs_path';
+
+## get the location of this script -- the db scripts can be found
+## relative to it
+my $loc  = sprintf("%s", __FILE__);
+$loc =~ /.*(\/.*?$)/; 
+my $sub = $1;
+$loc =~ s/$sub$//;
+$loc = abs_path($loc);
 
 #Variables to hold the database name and login name
-#The default value for both values is just the user's name
-my $dbname = getlogin || getpwuid($<);
-my $dblogin = getlogin || getpwuid($<);
+#The default value for both values is bgpmon_db bgpmon_db_user
+my $dbname = "bgpmon_db";
+my $dblogin = "bgpmon_db_user";
+my $help = 0;
 my $ret = GetOptions(	"dbname=s" => \$dbname,
-			"dblogin=s" => \$dblogin);
-
-#Run command to clear the tables
-`psql -c "DROP TABLE timeranges,peers,prefixes,ppms,update_import CASCADE;" $dbname $dblogin`;
+			"dblogin=s" => \$dblogin,
+                        "help|h" => \$help);
+if($help){
+  print STDERR "$0 [-h] [--dbname=name] [--dblogin=login]\n\n";
+  exit 0;
+}
 
 #Restore the table structure and function definitions
-`psql -f ../src/0_table_reset $dbname $dblogin`;
-`psql -f ../src/1_import_functions $dbname $dblogin`;
-`psql -f ../src/2_stat_queries $dbname $dblogin`;
+`psql -f $loc/bgpmon_analytics_db_0_pphTables.psql $dbname $dblogin`;
+if($?){
+  print STDERR "ERROR: the following error occured during " .
+               "bgpmon_analytics_db_0_pphTables.psql $dbname $dblogin\n $!\n";
+  exit 0;
+}
+`psql -f $loc/bgpmon_analytics_db_1_pphFunctions.psql $dbname $dblogin`;
+if($?){
+  print STDERR "ERROR: the following error occured during " .
+              "bgpmon_analytics_db_1_pphFunctions.psql $dbname $dblogin\n $!\n";
+  exit 0;
+}
+`psql -f $loc/bgpmon_analytics_db_2_pphQueryFuncs.psql $dbname $dblogin`;
+if($?){
+  print STDERR "ERROR: the following error occured during " .
+             "bgpmon_analytics_db_2_pphQueryFuncs.psql $dbname $dblogin\n $!\n";
+  exit 0;
+}
 
 1;

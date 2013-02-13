@@ -6,7 +6,7 @@
 
 =head1 NAME
 
-report.pl - A script to print and display some statistics about the database
+bgpmon_analytics_db_report - A script to print and display some statistics about the database
 
 =cut
 
@@ -20,7 +20,7 @@ Getopt::Long
 
 =head1 USAGE
 
-> ./report.pl --dbname=database --dblogin=username
+> ./bgpmon_analytics_db_report --dbname=database --dblogin=username
 
 =cut
 
@@ -61,7 +61,7 @@ use warnings;
 use Getopt::Long;
 
 
-our $VERSION = '1.06';
+our $VERSION = '1.07';
 
 #Variables to hold the database name and login name
 #The default value for both values is just the user's name
@@ -70,6 +70,6 @@ my $dblogin = getlogin || getpwuid($<);
 my $ret = GetOptions(	"dbname=s" => \$dbname,
 			"dblogin=s" => \$dblogin);
 
-`psql -c "SELECT PREFIXES,VANTAGES,MOST_ACTIVE FROM (SELECT COUNT(pref) FROM prefixes) AS PREFIXES, (SELECT COUNT(DISTINCT(addr,collector)) FROM peers) AS VANTAGES, (SELECT find_most_active_prefix()) AS MOST_ACTIVE;" -d $dbname -U $dblogin`;
+`psql -c "SELECT PREFIXES,VANTAGES,MOST_ACTIVE FROM (SELECT COUNT(pref) FROM pph.prefixes) AS PREFIXES, (SELECT COUNT(DISTINCT(addr,collector)) FROM pph.peers) AS VANTAGES, (SELECT pph.find_most_active_prefix()) AS MOST_ACTIVE;" -d $dbname -U $dblogin`;
 
 1;
